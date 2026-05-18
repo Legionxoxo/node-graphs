@@ -73,9 +73,19 @@ export default function Graph2DCanvas() {
   // react-force-graph exposes fg.d3Force(name) to get/set named forces.
   // We wait a tick so the internal simulation is guaranteed to exist.
   useEffect(() => {
-    const timer = setTimeout(() => {
+    // Use a polling retry instead of a fixed delay so that client-side
+    // navigation (where the dynamic import may take > 150 ms) still works.
+    // We keep retrying every 80 ms until the ForceGraph ref is mounted AND
+    // its internal d3 simulation has been wired up (d3Force is callable).
+    let rafId: ReturnType<typeof setTimeout>;
+
+    const tryApplyForces = () => {
       const fg = fgRef.current;
-      if (!fg) return;
+      // d3Force is only available once the internal simulation is ready
+      if (!fg || typeof fg.d3Force !== 'function') {
+        rafId = setTimeout(tryApplyForces, 80);
+        return;
+      }
 
       import('d3-force').then((d3) => {
         // ── KEY: replace forceCenter with forceX + forceY ─────────────────
@@ -103,9 +113,10 @@ export default function Graph2DCanvas() {
 
         fg.d3ReheatSimulation?.();
       });
-    }, 150);
+    };
 
-    return () => clearTimeout(timer);
+    rafId = setTimeout(tryApplyForces, 80);
+    return () => clearTimeout(rafId);
   }, []);
 
 
