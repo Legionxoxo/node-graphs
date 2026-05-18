@@ -2,8 +2,12 @@
 
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
+import { useGraphStore } from '@/store/graphStore';
 
 const CardNode = memo(({ data, selected }: NodeProps) => {
+  const { toggleChain } = useGraphStore();
+  const isExpanded = data.isExpandedChain === true;
+  const chainId = data.chainId as string;
   return (
     <>
       <Handle
@@ -14,7 +18,7 @@ const CardNode = memo(({ data, selected }: NodeProps) => {
       />
       <div
         className={`
-          min-w-[120px] max-w-[160px] px-4 py-3 rounded-xl cursor-pointer transition-all duration-200
+          group relative min-w-[120px] max-w-[160px] px-4 py-3 rounded-xl cursor-pointer transition-all duration-200
           border
           ${selected
             ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/20'
@@ -33,10 +37,22 @@ const CardNode = memo(({ data, selected }: NodeProps) => {
         `}
       >
         <div
-          className="text-sm font-semibold text-center leading-tight text-inherit"
+          className="text-sm font-semibold text-center leading-tight text-inherit relative"
         >
           {String(data.label)}
         </div>
+        {isExpanded && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleChain(chainId);
+            }}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Collapse sequence"
+          >
+            -
+          </button>
+        )}
       </div>
       <Handle
         type="source"
