@@ -48,7 +48,12 @@ const resolveId  = (r: NodeObject | string) => (typeof r === 'object' ? r.id : r
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Graph2DCanvas() {
-  const fgRef = useRef<any>(null);
+  const fgRef      = useRef<any>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Helper: grab the <canvas> the library renders so we can set cursor on it
+  const getCanvas = () =>
+    wrapperRef.current?.querySelector<HTMLCanvasElement>('canvas') ?? null;
 
   const [hoveredNode,   setHoveredNode]   = useState<NodeObject | null>(null);
   const [selectedNode,  setSelectedNode]  = useState<NodeObject | null>(null);
@@ -430,7 +435,8 @@ export default function Graph2DCanvas() {
   // ── Interaction handlers ───────────────────────────────────────────────────
   const handleNodeHover = useCallback((node: NodeObject | null) => {
     setHoveredNode(node ?? null);
-    document.body.style.cursor = node ? 'pointer' : 'default';
+    const canvas = getCanvas();
+    if (canvas) canvas.style.cursor = node ? 'pointer' : 'default';
   }, []);
 
   const handleNodeClick = useCallback(
@@ -443,7 +449,8 @@ export default function Graph2DCanvas() {
 
   const handleBgClick = useCallback(() => {
     setSelectedNode(null);
-    document.body.style.cursor = 'default';
+    const canvas = getCanvas();
+    if (canvas) canvas.style.cursor = 'default';
   }, []);
 
   // ── Drag: write to refs synchronously so painter sees it immediately ────────
@@ -467,7 +474,8 @@ export default function Graph2DCanvas() {
     node.fy = null;
     draggingNodeRef.current    = null;
     dragNeighborIdsRef.current = new Set();
-    document.body.style.cursor = 'default';
+    const canvas = getCanvas();
+    if (canvas) canvas.style.cursor = 'default';
     // Clear hover to restore default colors; selectedNode still takes over if set
     setHoveredNode(null);
   }, []);
@@ -484,7 +492,14 @@ export default function Graph2DCanvas() {
   }, []);
 
   return (
-    <div className="graph2d-root" onMouseLeave={() => document.body.style.cursor = 'default'}>
+    <div
+      ref={wrapperRef}
+      className="graph2d-root"
+      onMouseLeave={() => {
+        const canvas = getCanvas();
+        if (canvas) canvas.style.cursor = 'default';
+      }}
+    >
       <ForceGraph2D
         ref={fgRef}
         graphData={graphData as any}
