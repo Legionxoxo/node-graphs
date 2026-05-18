@@ -1,8 +1,33 @@
 @import "tailwindcss";
 
 :root {
+  --background: #fafafa;
+  --foreground: #1a1a1a;
+  --card-bg: #ffffff;
+  --card-border: #e5e5e5;
+  --card-selected: #f0f9ff;
+  --edge-dark: #1a1a1a;
+  --edge-light: #3b82f6;
+}
+
+.dark {
   --background: #0a0a0f;
   --foreground: #ededed;
+  --card-bg: linear-gradient(135deg, #252540 0%, #1a1a2e 100%);
+  --card-border: #3a3a5c;
+  --card-selected: linear-gradient(135deg, #1a2a4a 0%, #1a1a3e 100%);
+  --edge-dark: #4a5568;
+  --edge-light: #00d9ff;
+}
+
+.light {
+  --background: #fafafa;
+  --foreground: #1a1a1a;
+  --card-bg: #ffffff;
+  --card-border: #e5e5e5;
+  --card-selected: #f0f9ff;
+  --edge-dark: #1a1a1a;
+  --edge-light: #3b82f6;
 }
 
 @theme inline {
@@ -20,46 +45,56 @@ body {
   padding: 0;
 }
 
-/* React Flow overrides for dark theme */
+/* React Flow overrides */
 .react-flow__node-circle {
   cursor: pointer;
 }
 
 .react-flow__background {
+  background-color: var(--background);
+}
+
+.light .react-flow__background {
+  background-color: var(--background);
+}
+
+.dark .react-flow__background {
   background-color: #0a0a0f;
 }
 
-.react-flow__controls {
+.light .react-flow__controls {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.dark .react-flow__controls {
   background-color: #1a1a2e;
   border-color: #333;
 }
 
-.react-flow__controls button {
+.light .react-flow__controls button {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  color: var(--foreground);
+}
+
+.dark .react-flow__controls button {
   background-color: #1a1a2e;
   border-color: #333;
   color: #fff;
 }
 
 .react-flow__controls button:hover {
-  background-color: #2a2a4e;
+  background-color: var(--card-border);
 }
 
-.react-flow__minimap {
-  background-color: #1a1a2e;
-  border-color: #333;
-}
-
+/* React Flow edge styles */
 .react-flow__edge-path {
-  stroke: #4a5568;
+  stroke: var(--edge-dark);
   stroke-width: 2;
 }
 
-.react-flow__edge.selected .react-flow__edge-path {
-  stroke: #00d9ff;
-}
-
-/* Animated edge dash */
-.animated-edge {
+.dark .react-flow__edge.animated path {
   stroke-dasharray: 5;
   animation: dashdraw 0.5s linear infinite;
 }

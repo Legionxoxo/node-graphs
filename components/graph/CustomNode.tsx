@@ -13,30 +13,27 @@ const CardNode = memo(({ data, selected }: NodeProps) => {
         style={{ visibility: 'hidden' }}
       />
       <div
-        style={{
-          minWidth: '120px',
-          maxWidth: '160px',
-          padding: '12px 16px',
-          borderRadius: '12px',
-          background: selected
-            ? 'linear-gradient(135deg, #1a2a4a 0%, #1a1a3e 100%)'
-            : 'linear-gradient(135deg, #252540 0%, #1a1a2e 100%)',
-          border: selected ? '2px solid #00d9ff' : '1px solid #3a3a5c',
-          boxShadow: selected
-            ? '0 0 24px rgba(0, 217, 255, 0.3), 0 4px 12px rgba(0,0,0,0.4)'
-            : '0 2px 8px rgba(0,0,0,0.3)',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-        }}
+        className={`
+          min-w-[120px] max-w-[160px] px-4 py-3 rounded-xl cursor-pointer transition-all duration-200
+          border
+          ${selected
+            ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/20'
+            : 'border-gray-200 shadow-sm'
+          }
+          bg-white
+          text-gray-900
+          dark:bg-gradient-to-br dark:from-[#252540] dark:to-[#1a1a2e]
+          dark:border-[#3a3a5c]
+          dark:text-white
+          dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]
+          ${selected
+            ? 'dark:border-[#00d9ff] dark:shadow-[0_0_24px_rgba(0,217,255,0.3)]'
+            : ''
+          }
+        `}
       >
         <div
-          style={{
-            color: '#fff',
-            fontSize: '14px',
-            fontWeight: 600,
-            textAlign: 'center',
-            lineHeight: 1.3,
-          }}
+          className="text-sm font-semibold text-center leading-tight text-inherit"
         >
           {String(data.label)}
         </div>

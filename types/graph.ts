@@ -11,6 +11,7 @@ export type GraphNode = Node<GraphNodeData, 'card'>;
 export interface GraphEdgeData extends Record<string, unknown> {
   label?: string;
   animated?: boolean;
+  edgeType?: 'sequential' | 'semantic';
 }
 
 export type GraphEdge = Edge<GraphEdgeData>;

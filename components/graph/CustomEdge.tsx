@@ -1,54 +1,41 @@
 'use client';
 
 import { memo } from 'react';
-import { EdgeProps, getBezierPath } from '@xyflow/react';
+import { EdgeProps, getStraightPath } from '@xyflow/react';
+import type { GraphEdge } from '@/types/graph';
 
-const CustomEdge = memo(({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  style,
-  markerEnd,
-}: EdgeProps) => {
-  const [edgePath] = getBezierPath({
+const CustomEdge = memo((props: EdgeProps<GraphEdge>) => {
+  const {
+    id,
     sourceX,
     sourceY,
-    sourcePosition,
     targetX,
     targetY,
-    targetPosition,
+    markerEnd,
+    data,
+  } = props;
+
+  const [edgePath] = getStraightPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
   });
 
+  const edgeType = (data as { edgeType?: string } | null)?.edgeType ?? 'semantic';
+  const isSequential = edgeType === 'sequential';
+
   return (
-    <>
-      <defs>
-        <linearGradient id={`gradient-${id}`} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#4a5568" />
-          <stop offset="100%" stopColor="#00d9ff" />
-        </linearGradient>
-      </defs>
-      <path
-        id={id}
-        d={edgePath}
-        fill="none"
-        stroke={`url(#gradient-${id})`}
-        strokeWidth={2}
-        style={style}
-        className="animated-edge"
-      />
-      <path
-        d={edgePath}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={20}
-        markerEnd={markerEnd}
-        style={{ cursor: 'pointer' }}
-      />
-    </>
+    <path
+      id={id}
+      d={edgePath}
+      fill="none"
+      stroke={isSequential ? '#3b82f6' : '#9ca3af'}
+      strokeWidth={2}
+      strokeDasharray={isSequential ? undefined : '5 5'}
+      markerEnd={markerEnd}
+      className="dark:stroke-[#4a5568] dark:data-[sequential]:stroke-[#00d9ff]"
+    />
   );
 });
 

@@ -23,11 +23,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                const stored = localStorage.getItem('theme');
+                const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+                if (stored === 'light' || (!stored && prefersLight)) {
+                  document.documentElement.classList.add('light');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} min-h-full flex flex-col`}>{children}</body>
     </html>
   );
 }

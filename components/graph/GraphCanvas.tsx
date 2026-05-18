@@ -1,13 +1,26 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
-import { ReactFlow, Controls, Background, MiniMap, BackgroundVariant } from '@xyflow/react';
+import { ReactFlow, Controls, Background, BackgroundVariant, Panel, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useGraphStore } from '@/store/graphStore';
 import { useSampleData } from '@/hooks/useSampleData';
 import CardNode from './CustomNode';
 import CustomEdge from './CustomEdge';
+
+function TakeMeHomeButton() {
+  const { fitView } = useReactFlow();
+  return (
+    <Panel position="top-center">
+      <button
+        onClick={() => fitView({ padding: 0.2, duration: 800 })}
+        className="px-6 py-2 mt-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-semibold shadow-lg transition-all duration-200"
+      >
+        Take me home
+      </button>
+    </Panel>
+  );
+}
 
 const nodeTypes = {
   card: CardNode,
@@ -19,8 +32,6 @@ const edgeTypes = {
 
 const defaultEdgeOptions = {
   type: 'custom',
-  animated: true,
-  style: { stroke: '#4a5568', strokeWidth: 1.5 },
 };
 
 export default function GraphCanvas() {
@@ -32,25 +43,7 @@ export default function GraphCanvas() {
     onNodesChange,
     onEdgesChange,
     onConnect,
-    selectedNodeId,
-    selectNode,
   } = useGraphStore();
-
-  const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: { nodes: any[] }) => {
-      if (selectedNodes.length === 1) {
-        selectNode(selectedNodes[0].id);
-      } else {
-        selectNode(null);
-      }
-    },
-    [selectNode]
-  );
-
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) || null,
-    [nodes, selectedNodeId]
-  );
 
   return (
     <div className="w-full h-screen flex">
@@ -61,7 +54,6 @@ export default function GraphCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onSelectionChange={onSelectionChange}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
@@ -70,55 +62,22 @@ export default function GraphCanvas() {
           minZoom={0.1}
           maxZoom={4}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          translateExtent={[[-2000, -2000], [3000, 3000]]}
+          nodeExtent={[[-2000, -2000], [3000, 3000]]}
         >
           <Controls
             showInteractive={false}
-            style={{
-              background: '#1a1a2e',
-              border: '1px solid #333',
-              borderRadius: '8px',
-            }}
+            showFitView={false}
           />
-          <MiniMap
-            nodeColor={(node) => (node.selected ? '#00d9ff' : '#3a3a5c')}
-            maskColor="rgba(0, 0, 0, 0.7)"
-            style={{
-              background: '#1a1a2e',
-              border: '1px solid #333',
-              borderRadius: '8px',
-            }}
-          />
+          <TakeMeHomeButton />
           <Background
-            color="#2d2d44"
+            color="var(--background-dot, #d1d5db)"
             gap={20}
             variant={BackgroundVariant.Dots}
-            style={{ opacity: 0.5 }}
+            style={{ opacity: 0.6 }}
           />
         </ReactFlow>
       </div>
-
-      {/* Sidebar for selected node */}
-      {selectedNode && (
-        <div
-          className="w-64 bg-[#1a1a2e] border-l border-[#333] p-4 overflow-auto"
-          style={{ maxHeight: '100vh' }}
-        >
-          <h2 className="text-lg font-semibold text-white mb-2">
-            {selectedNode.data.label}
-          </h2>
-          {selectedNode.data.description && (
-            <p className="text-sm text-gray-400 mb-4">
-              {selectedNode.data.description}
-            </p>
-          )}
-          <div className="text-xs text-gray-500">
-            <p>ID: {selectedNode.id}</p>
-            <p>
-              Position: {Math.round(selectedNode.position.x)}, {Math.round(selectedNode.position.y)}
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
