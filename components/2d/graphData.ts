@@ -137,9 +137,6 @@ const obsidianGraphData: GraphData = {
         // Cross-cluster (weak/semantic links)
         { source: "obsidian-clone", target: "web3", strength: 0.6 },
         { source: "obsidian-clone", target: "vector-db", strength: 0.6 },
-        { source: "obsidian-clone", target: "ai-notes", strength: 0.6 },
-        { source: "knowledge-graph", target: "ai-notes", strength: 0.6 },
-        { source: "knowledge-graph", target: "vector-db", strength: 0.6 },
         { source: "llm", target: "seo-research", strength: 0.6 },
         { source: "graphql", target: "vector-db", strength: 0.6 },
         { source: "e2ee", target: "web3", strength: 0.6 },

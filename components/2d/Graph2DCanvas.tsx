@@ -243,7 +243,7 @@ export default function Graph2DCanvas() {
           let toScale: number;
           let toTextColor: string;
           if (highlightNodeIds.has(n.id)) {
-            const isActive = n.id === (hoveredNode?.id ?? selectedNode?.id);
+            const isActive = n.id === (hoveredNode?.id ?? selectedNode?.id) || (searchQuery.trim() && n.label?.toLowerCase().includes(searchQuery.toLowerCase()));
             toColor = isActive ? COLOR_ACTIVE : COLOR_NEIGHBOR;
             toAlpha = 1;
             toScale = isActive ? 1.3 : 1;
@@ -346,7 +346,7 @@ export default function Graph2DCanvas() {
     (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
       // Use draggingNodeRef for immediate response during drag; fallback to state
       const activeId = draggingNodeRef.current?.id ?? hoveredNode?.id ?? selectedNode?.id;
-      const isActive = node.id === activeId;
+      const isActive = node.id === activeId || (searchQuery.trim() && node.label?.toLowerCase().includes(searchQuery.toLowerCase()));
       const r = nodeRadius(node) * (curNodeScale.current[node.id] ?? 1);
 
       const displayColor = curNodeColor.current[node.id] ?? nodeColor(node);
@@ -378,7 +378,7 @@ export default function Graph2DCanvas() {
       ctx.fillText(node.label, node.x!, node.y! + r + 4);
       ctx.restore();
     },
-    [hoveredNode, selectedNode],
+    [hoveredNode, selectedNode, searchQuery],
   );
 
   // ── Link painter ───────────────────────────────────────────────────────────
@@ -441,7 +441,10 @@ export default function Graph2DCanvas() {
     [],
   );
 
-  const handleBgClick = useCallback(() => setSelectedNode(null), []);
+  const handleBgClick = useCallback(() => {
+    setSelectedNode(null);
+    document.body.style.cursor = 'default';
+  }, []);
 
   // ── Drag: write to refs synchronously so painter sees it immediately ────────
   const handleDragStart = useCallback((node: NodeObject) => {
@@ -464,6 +467,7 @@ export default function Graph2DCanvas() {
     node.fy = null;
     draggingNodeRef.current    = null;
     dragNeighborIdsRef.current = new Set();
+    document.body.style.cursor = 'default';
     // Clear hover to restore default colors; selectedNode still takes over if set
     setHoveredNode(null);
   }, []);
@@ -480,7 +484,7 @@ export default function Graph2DCanvas() {
   }, []);
 
   return (
-    <div className="graph2d-root">
+    <div className="graph2d-root" onMouseLeave={() => document.body.style.cursor = 'default'}>
       <ForceGraph2D
         ref={fgRef}
         graphData={graphData as any}
@@ -550,6 +554,7 @@ export default function Graph2DCanvas() {
 
 
       {/* Legend */}
+      {/*
       <div className="graph2d-legend">
         {Object.entries(GROUP_COLORS)
           .filter(([k]) => k !== 'default')
@@ -560,6 +565,7 @@ export default function Graph2DCanvas() {
             </div>
           ))}
       </div>
+      */}
     </div>
   );
 }
