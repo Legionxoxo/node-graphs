@@ -10,12 +10,20 @@ export default function Home() {
         <p className="text-lg text-zinc-400 max-w-md">
           Visual canvas for exploring interconnected ideas, notes, and relationships.
         </p>
-        <Link
-          href="/graph"
-          className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#00d9ff] px-6 text-[#0a0a0f] font-medium transition-colors hover:bg-[#00b8d9]"
-        >
-          Open Graph View
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Link
+            href="/graph"
+            className="flex h-12 items-center justify-center gap-2 rounded-full border border-zinc-700 px-6 text-zinc-300 font-medium transition-colors hover:border-zinc-500 hover:text-white"
+          >
+            React Flow View
+          </Link>
+          <Link
+            href="/graph/2d"
+            className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#7c6af7] px-6 text-white font-medium transition-colors hover:bg-[#6a58e6]"
+          >
+            ✦ 2D Graph View
+          </Link>
+        </div>
       </main>
     </div>
   );
