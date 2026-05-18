@@ -29,7 +29,7 @@ interface LinkObject {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BG_COLOR    = '#0d0d12';
+const BG_COLOR    = '#d4d4d8';
 const BASE_R      = 5;
 const LABEL_FONT  = '500 11px Inter, ui-sans-serif, sans-serif';
 
@@ -43,10 +43,15 @@ export default function Graph2DCanvas() {
   const fgRef = useRef<any>(null);
 
   const [hoveredNode,   setHoveredNode]   = useState<NodeObject | null>(null);
-  const [draggingNode,  setDraggingNode]  = useState<NodeObject | null>(null);
   const [selectedNode,  setSelectedNode]  = useState<NodeObject | null>(null);
   const [searchQuery,   setSearchQuery]   = useState('');
   const [dimensions,    setDimensions]    = useState({ w: 800, h: 600 });
+
+  // Refs for drag state — updated synchronously so the canvas painter
+  // always sees the current value on the very next animation frame,
+  // without waiting for a React re-render cycle.
+  const draggingNodeRef    = useRef<NodeObject | null>(null);
+  const dragNeighborIdsRef = useRef<Set<string>>(new Set());
 
   // react-force-graph mutates link objects in place (replaces string ids with
   // NodeObject refs). We keep one stable copy so identity comparisons work.
@@ -108,10 +113,9 @@ export default function Graph2DCanvas() {
   // Compare against graphData.links (mutated in-place by the library) so object
   // identity works after source/target become NodeObject refs.
   const { highlightNodeIds, highlightLinkSet } = useMemo(() => {
-    // Priority: dragging > hovering > selected
-    // draggingNode is tracked separately because the library fires
-    // onNodeHover(null) the moment a drag starts, clearing hoveredNode.
-    const focus = draggingNode ?? hoveredNode ?? selectedNode;
+    // During drag we use refs (handled in paintNode directly).
+    // Here we only handle hover / selected / search.
+    const focus = hoveredNode ?? selectedNode;
     const hNodeIds = new Set<string>();
     const hLinks   = new Set<LinkObject>();
 
@@ -137,7 +141,7 @@ export default function Graph2DCanvas() {
     }
 
     return { highlightNodeIds: hNodeIds, highlightLinkSet: hLinks };
-  }, [draggingNode, hoveredNode, selectedNode, searchQuery, graphData]);
+  }, [hoveredNode, selectedNode, searchQuery, graphData]);
 
   const hasHighlight = highlightNodeIds.size > 0;
 
@@ -146,8 +150,15 @@ export default function Graph2DCanvas() {
     (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const r     = nodeRadius(node);
       const color = nodeColor(node);
-      const isHL  = !hasHighlight || highlightNodeIds.has(node.id);
-      const isHov = (draggingNode ?? hoveredNode)?.id === node.id;
+
+      // During drag: read refs synchronously (no React re-render needed)
+      const isDragging = draggingNodeRef.current !== null;
+      const isHL = isDragging
+        ? dragNeighborIdsRef.current.has(node.id)
+        : !hasHighlight || highlightNodeIds.has(node.id);
+      const isHov = isDragging
+        ? node.id === draggingNodeRef.current?.id
+        : hoveredNode?.id === node.id;
       const isSel = selectedNode?.id === node.id;
 
       ctx.save();
@@ -174,7 +185,7 @@ export default function Graph2DCanvas() {
 
       // White ring on selected
       if (isSel) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
         ctx.lineWidth   = 1.2 / globalScale;
         ctx.stroke();
       }
@@ -183,28 +194,28 @@ export default function Graph2DCanvas() {
       ctx.restore();
 
       // Labels: hidden below LABEL_MIN_ZOOM, fade in smoothly up to LABEL_FULL_ZOOM
-      const LABEL_MIN_ZOOM  = 1.2;   // labels start appearing
-      const LABEL_FULL_ZOOM = 2.2;   // labels fully opaque
+      const LABEL_MIN_ZOOM  = 1.2;
+      const LABEL_FULL_ZOOM = 2.2;
       if (globalScale < LABEL_MIN_ZOOM) return;
 
-      const labelFade   = Math.min(1, (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
-      const fontSize    = Math.max(9, Math.min(13, 11 / Math.sqrt(globalScale)));
+      const labelFade = Math.min(1, (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
+      const fontSize  = Math.max(9, Math.min(13, 11 / Math.sqrt(globalScale)));
       ctx.save();
       ctx.font         = LABEL_FONT.replace('11px', `${fontSize}px`);
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
       ctx.globalAlpha  = labelFade * (isHL ? 1 : 0.18);
-      ctx.shadowColor  = 'rgba(0,0,0,0.95)';
+      ctx.shadowColor  = 'rgba(0,0,0,0.3)';
       ctx.shadowBlur   = 6;
       ctx.fillStyle    = isHov || isSel
-        ? '#ffffff'
-        : hasHighlight && !isHL
-          ? 'rgba(150,150,170,0.35)'
-          : 'rgba(200,200,220,0.85)';
+        ? '#000000'
+        : (isDragging || hasHighlight) && !isHL
+          ? 'rgba(80,80,100,0.35)'
+          : 'rgba(30,30,50,0.85)';
       ctx.fillText(node.label, node.x!, node.y! + r + 4);
       ctx.restore();
     },
-    [hasHighlight, highlightNodeIds, draggingNode, hoveredNode, selectedNode],
+    [hasHighlight, highlightNodeIds, hoveredNode, selectedNode],
   );
 
   // ── Link painter ───────────────────────────────────────────────────────────
@@ -214,7 +225,13 @@ export default function Graph2DCanvas() {
       const tgt = link.target as NodeObject;
       if (src?.x == null || tgt?.x == null) return;
 
-      const isHL = !hasHighlight || highlightLinkSet.has(link);
+      // Also dim links during drag using refs
+      const isDragging = draggingNodeRef.current !== null;
+      const isHL = isDragging
+        ? dragNeighborIdsRef.current.has(resolveId(link.source)) &&
+          dragNeighborIdsRef.current.has(resolveId(link.target))
+        : !hasHighlight || highlightLinkSet.has(link);
+
       const str  = link.strength ?? 0.5;
       const weak = str < 0.4;
 
@@ -222,8 +239,8 @@ export default function Graph2DCanvas() {
       ctx.moveTo(src.x, src.y!);
       ctx.lineTo(tgt.x, tgt.y!);
       ctx.strokeStyle = isHL
-        ? weak ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)'
-        : weak ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
+        ? weak ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.5)'
+        : weak ? 'rgba(0,0,0,0.03)' : 'rgba(0,0,0,0.06)';
       ctx.lineWidth = isHL ? (str >= 0.9 ? 1.4 : 0.9) : 0.5;
       if (weak) ctx.setLineDash([3, 5]);
       ctx.stroke();
@@ -266,15 +283,25 @@ export default function Graph2DCanvas() {
 
   const handleBgClick = useCallback(() => setSelectedNode(null), []);
 
-  // ── Drag: gray rest of nodes during drag, release to physics on drop ────────
+  // ── Drag: write to refs synchronously so painter sees it immediately ────────
   const handleDragStart = useCallback((node: NodeObject) => {
-    setDraggingNode(node);
-  }, []);
+    draggingNodeRef.current = node;
+    // Precompute this node's neighbors once so paintNode can read it cheaply
+    const neighbors = new Set<string>([node.id]);
+    graphData.links.forEach(l => {
+      const src = resolveId(l.source);
+      const tgt = resolveId(l.target);
+      if (src === node.id) neighbors.add(tgt);
+      if (tgt === node.id) neighbors.add(src);
+    });
+    dragNeighborIdsRef.current = neighbors;
+  }, [graphData]);
 
   const handleDragEnd = useCallback((node: NodeObject) => {
     node.fx = null;
     node.fy = null;
-    setDraggingNode(null);
+    draggingNodeRef.current    = null;
+    dragNeighborIdsRef.current = new Set();
   }, []);
 
   // ── Controls ───────────────────────────────────────────────────────────────
@@ -313,7 +340,7 @@ export default function Graph2DCanvas() {
         onNodeHover={handleNodeHover as any}
         onNodeClick={handleNodeClick as any}
         onBackgroundClick={handleBgClick}
-        onNodeDragStart={handleDragStart as any}
+        onNodeDrag={handleDragStart as any}
         onNodeDragEnd={handleDragEnd as any}
 
         /* Physics */
