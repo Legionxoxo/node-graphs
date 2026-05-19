@@ -534,8 +534,8 @@ export default function Graph2DCanvas() {
         enableNodeDrag={true}
         onNodeDrag={handleNodeDrag as any}
         onNodeDragEnd={handleDragEnd as any}
-        d3AlphaDecay={0.008}
-        d3VelocityDecay={0.8}
+        d3AlphaDecay={0.006}
+        d3VelocityDecay={0.75}
         warmupTicks={100}
         cooldownTicks={Infinity}
         minZoom={0.1}
