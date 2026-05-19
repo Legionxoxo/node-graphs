@@ -114,7 +114,6 @@ export default function Graph2DCanvas() {
   const draggingNodeRef = useRef<NodeObject | null>(null);
   const dragNeighborIdsRef = useRef<Set<string>>(new Set());
 
-  const dragRafRef = useRef<number | null>(null);
   const pumpRafRef = useRef<number | null>(null);
 
   // ── Transition refs ─────────────────────────────────────────────────────────
@@ -474,34 +473,32 @@ export default function Graph2DCanvas() {
   }, [graphData, startTransitions]);
 
   const handleDragEnd = useCallback((node: NodeObject) => {
+    // 1. Release the node back to the physics engine
     node.fx = null;
     node.fy = null;
 
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
 
-    startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
+    // 2. Create the Ease-Out effect by injecting initial velocity
+    // Assuming the cluster center is (0,0) based on your forceX/forceY config
+    const targetX = 0;
+    const targetY = 0;
 
+    const dx = targetX - (node.x ?? 0);
+    const dy = targetY - (node.y ?? 0);
 
-    // Smooth ease-out: dampen only the dragged node's velocity
-    if (dragRafRef.current) cancelAnimationFrame(dragRafRef.current);
+    // Change this from 0.15 to a much smaller fraction
+    const SPEED_MULTIPLIER = 0.015;
 
-    let frame = 0;
-    const totalFrames = 20;
+    node.vx = (node.vx ?? 0) + (dx * SPEED_MULTIPLIER);
+    node.vy = (node.vy ?? 0) + (dy * SPEED_MULTIPLIER);
 
-    const easeRelease = () => {
-      frame++;
-      if (frame < totalFrames) {
-        if (node.vx !== undefined) node.vx *= 0.88;
-        if (node.vy !== undefined) node.vy *= 0.88;
-        dragRafRef.current = requestAnimationFrame(easeRelease);
-      } else {
-        dragRafRef.current = null;
-      }
-    };
-
-    easeRelease();
-  }, [startTransitions, graphData]);
+    // 3. Wake up the simulation so friction and collision forces can take over
+    if (fgRef.current) {
+      fgRef.current.d3ReheatSimulation();
+    }
+  }, []);
 
   // ── Search handler ─────────────────────────────────────────────────────────
   const handleSearch = useCallback((q: string) => {
@@ -538,7 +535,7 @@ export default function Graph2DCanvas() {
         onNodeDrag={handleNodeDrag as any}
         onNodeDragEnd={handleDragEnd as any}
         d3AlphaDecay={0.008}
-        d3VelocityDecay={0.3}
+        d3VelocityDecay={0.8}
         warmupTicks={100}
         cooldownTicks={Infinity}
         minZoom={0.1}
