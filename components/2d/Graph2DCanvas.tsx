@@ -115,6 +115,7 @@ export default function Graph2DCanvas() {
   const dragNeighborIdsRef = useRef<Set<string>>(new Set());
 
   const pumpRafRef = useRef<number | null>(null);
+  const zoomRafRef = useRef<number | null>(null);
 
   // ── Transition refs ─────────────────────────────────────────────────────────
   const nodeTransitions = useRef<Map<string, NodeTransition>>(new Map());
@@ -506,9 +507,52 @@ export default function Graph2DCanvas() {
     startTransitions(hoveredNode, q, selectedNodeRef.current);
   }, [startTransitions, hoveredNode]);
 
+// ── Easing functions ────────────────────────────────────────────────────────
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ── Smooth zoom animator ─────────────────────────────────────────────────────
+function animateZoom(
+  fg: any,
+  target: number,
+  duration = 600,
+  rafRef: { current: number | null },
+) {
+  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  const start = fg.zoom();
+  if (start === target) return;
+  const startTime = performance.now();
+
+  const step = (now: number) => {
+    const t = Math.min(1, (now - startTime) / duration);
+    fg.zoom(start + (target - start) * easeOutCubic(t), 0);
+    if (t < 1) {
+      rafRef.current = requestAnimationFrame(step);
+    } else {
+      rafRef.current = null;
+    }
+  };
+  rafRef.current = requestAnimationFrame(step);
+}
+
   // ── Controls ───────────────────────────────────────────────────────────────
-  const handleZoomIn = useCallback(() => { fgRef.current?.zoom((fgRef.current?.zoom() ?? 1) * 1.4, 300); }, []);
-  const handleZoomOut = useCallback(() => { fgRef.current?.zoom((fgRef.current?.zoom() ?? 1) / 1.4, 300); }, []);
+  const handleZoomIn = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    const current = fg.zoom() ?? 1;
+    const target = Math.min(12, current * 1.4);
+    animateZoom(fg, target, 600, zoomRafRef);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    const current = fg.zoom() ?? 1;
+    const target = Math.max(0.1, current / 1.4);
+    animateZoom(fg, target, 600, zoomRafRef);
+  }, []);
+
   const handleFitView = useCallback(() => { fgRef.current?.zoomToFit(500, 80); }, []);
 
   return (
