@@ -118,6 +118,10 @@ export default function Graph2DCanvas() {
   const currentColorRef = useRef<Map<string, string>>(new Map());
   const currentRadiusRef = useRef<Map<string, number>>(new Map());
 
+  // ── Deferred label rendering (for z-ordering active labels above nodes) ────
+  const deferredLabels = useRef<Array<() => void>>([]);
+  const paintCountRef = useRef(0);
+
   // ── Safe Refs for Callbacks ─────────────────────────────────────────────────
   const selectedNodeRef = useRef<NodeObject | null>(null);
   const searchQueryRef = useRef('');
@@ -266,6 +270,8 @@ export default function Graph2DCanvas() {
   // ── Node painter ─────────────────────────────────────────────────────────────
   const paintNode = useCallback(
     (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      paintCountRef.current++;
+
       const now = performance.now();
       const tr = nodeTransitions.current.get(node.id);
 
@@ -306,38 +312,48 @@ export default function Graph2DCanvas() {
       // Changed thresholds for visibility
       const LABEL_MIN_ZOOM = 1.5, LABEL_FULL_ZOOM = 2.25;
 
-      if (!isActive && globalScale < LABEL_MIN_ZOOM) return;
+      // Helper to draw a node's label
+      const drawLabel = () => {
+        const labelFade = isActive ? 1 : Math.min(1, 0.3 + (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
+        if (labelFade <= 0) return;
 
-      const labelFade = isActive ? 1 : Math.min(1, 0.3 + (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
-      if (labelFade <= 0) return;
+        const VISUAL_FONT_SIZE = globalScale < 2.0 ? 10 : globalScale < 2.5 ? 12 : globalScale < 3.0 ? 14 : 16;
+        const fontSize = VISUAL_FONT_SIZE / globalScale;
+        const textColor = isActive ? '#3E3E3E' : hasHighlight && !highlightNodeIds.has(node.id) ? COLOR_REST : nodeColor(node);
 
-      // Step-based font scaling: 10px at 1.5–2x, 12px at 2–2.5x, 14px at 2.5–3x, 16px at 3x+
-      const VISUAL_FONT_SIZE = globalScale < 2.0 ? 10 : globalScale < 2.5 ? 12 : globalScale < 3.0 ? 14 : 16;
-      const fontSize = VISUAL_FONT_SIZE / globalScale;
+        ctx.save();
+        ctx.font = `500 ${fontSize}px Inter, ui-sans-serif, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.globalAlpha = labelFade;
+        ctx.fillStyle = textColor;
 
-      const textColor = isActive ? '#3E3E3E' : hasHighlight && !highlightNodeIds.has(node.id) ? COLOR_REST : nodeColor(node);
+        const startY = node.y! + r + 4 / globalScale;
 
-      ctx.save();
-      ctx.font = `500 ${fontSize}px Inter, ui-sans-serif, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.globalAlpha = labelFade;
-      ctx.fillStyle = textColor;
-
-      const startY = node.y! + r + 4 / globalScale;
+        if (isActive) {
+          ctx.fillText(node.label, node.x!, startY);
+        } else {
+          const truncatedLine = truncateWords(node.label, 7);
+          ctx.fillText(truncatedLine, node.x!, startY);
+        }
+        ctx.restore();
+      };
 
       if (isActive) {
-        // Show full text on single line, no wrap
-        ctx.fillText(node.label, node.x!, startY);
-      } else {
-        // Truncate to one line of ~7 words if not active
-        const truncatedLine = truncateWords(node.label, 7);
-        ctx.fillText(truncatedLine, node.x!, startY);
+        // Defer active labels so they render on top of all nodes
+        deferredLabels.current.push(drawLabel);
+      } else if (globalScale >= LABEL_MIN_ZOOM) {
+        drawLabel();
       }
 
-      ctx.restore();
+      // After the last node is painted, flush deferred active labels on top
+      if (paintCountRef.current >= graphData.nodes.length) {
+        deferredLabels.current.forEach(fn => fn());
+        deferredLabels.current = [];
+        paintCountRef.current = 0;
+      }
     },
-    [hoveredNode, selectedNode, searchQuery, hasHighlight, highlightNodeIds, renderTrigger],
+    [hoveredNode, selectedNode, searchQuery, hasHighlight, highlightNodeIds, renderTrigger, graphData.nodes.length],
   );
 
   // ── Link painter ───────────────────────────────────────────────────────────
