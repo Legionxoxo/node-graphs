@@ -507,34 +507,34 @@ export default function Graph2DCanvas() {
     startTransitions(hoveredNode, q, selectedNodeRef.current);
   }, [startTransitions, hoveredNode]);
 
-// ── Easing functions ────────────────────────────────────────────────────────
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
+  // ── Easing functions ────────────────────────────────────────────────────────
+  function easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
 
-// ── Smooth zoom animator ─────────────────────────────────────────────────────
-function animateZoom(
-  fg: any,
-  target: number,
-  duration = 600,
-  rafRef: { current: number | null },
-) {
-  if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  const start = fg.zoom();
-  if (start === target) return;
-  const startTime = performance.now();
+  // ── Smooth zoom animator ─────────────────────────────────────────────────────
+  function animateZoom(
+    fg: any,
+    target: number,
+    duration = 600,
+    rafRef: { current: number | null },
+  ) {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const start = fg.zoom();
+    if (start === target) return;
+    const startTime = performance.now();
 
-  const step = (now: number) => {
-    const t = Math.min(1, (now - startTime) / duration);
-    fg.zoom(start + (target - start) * easeOutCubic(t), 0);
-    if (t < 1) {
-      rafRef.current = requestAnimationFrame(step);
-    } else {
-      rafRef.current = null;
-    }
-  };
-  rafRef.current = requestAnimationFrame(step);
-}
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      fg.zoom(start + (target - start) * easeOutCubic(t), 0);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  }
 
   // ── Controls ───────────────────────────────────────────────────────────────
   const handleZoomIn = useCallback(() => {
@@ -578,7 +578,7 @@ function animateZoom(
         enableNodeDrag={true}
         onNodeDrag={handleNodeDrag as any}
         onNodeDragEnd={handleDragEnd as any}
-        d3AlphaDecay={0.002}
+        d3AlphaDecay={0.01}
         d3VelocityDecay={0.85}
         warmupTicks={100}
         cooldownTicks={Infinity}
