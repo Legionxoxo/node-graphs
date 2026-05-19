@@ -410,26 +410,23 @@ export default function Graph2DCanvas() {
     node.fx = null;
     node.fy = null;
 
-    const affectedIds = new Set(dragNeighborIdsRef.current);
-    const affectedNodes = graphData.nodes.filter(n => affectedIds.has(n.id));
-
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
 
-    startTransitions(node, searchQueryRef.current, selectedNodeRef.current);
+    startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
 
+
+    // Smooth ease-out: dampen only the dragged node's velocity
     if (dragRafRef.current) cancelAnimationFrame(dragRafRef.current);
 
     let frame = 0;
-    const totalFrames = 25;
+    const totalFrames = 20;
 
     const easeRelease = () => {
       frame++;
       if (frame < totalFrames) {
-        affectedNodes.forEach(n => {
-          if (n.vx !== undefined) n.vx *= 0.92;
-          if (n.vy !== undefined) n.vy *= 0.92;
-        });
+        if (node.vx !== undefined) node.vx *= 0.88;
+        if (node.vy !== undefined) node.vy *= 0.88;
         dragRafRef.current = requestAnimationFrame(easeRelease);
       } else {
         dragRafRef.current = null;
