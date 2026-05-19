@@ -71,13 +71,13 @@ const nodeColor = (n: NodeObject) => GROUP_COLORS[n.group] ?? GROUP_COLORS.defau
 const nodeRadius = (n: NodeObject) => BASE_R * Math.sqrt(n.val ?? 1);
 const resolveId = (r: NodeObject | string) => (typeof r === 'object' ? r.id : r);
 
-// AABB Collision detection
+// AABB Collision detection (Made slightly stricter with <= to avoid touching borders)
 const isColliding = (b1: BBox, b2: BBox): boolean => {
   return !(
-    b1.x + b1.width < b2.x ||
-    b2.x + b2.width < b1.x ||
-    b1.y + b1.height < b2.y ||
-    b2.y + b2.height < b1.y
+    b1.x + b1.width <= b2.x ||
+    b2.x + b2.width <= b1.x ||
+    b1.y + b1.height <= b2.y ||
+    b2.y + b2.height <= b1.y
   );
 };
 
@@ -115,7 +115,6 @@ export default function Graph2DCanvas() {
   const dragNeighborIdsRef = useRef<Set<string>>(new Set());
 
   const pumpRafRef = useRef<number | null>(null);
-  const zoomRafRef = useRef<number | null>(null);
 
   // ── Transition refs ─────────────────────────────────────────────────────────
   const nodeTransitions = useRef<Map<string, NodeTransition>>(new Map());
@@ -123,9 +122,9 @@ export default function Graph2DCanvas() {
   const currentRadiusRef = useRef<Map<string, number>>(new Map());
 
   // ── Deferred label rendering & Collision ────────────────────────────────────
-  const deferredLabels = useRef<Array<() => void>>([]);
+  const deferredLabels = useRef<Array<{ priority: number, draw: () => void }>>([]);
   const paintCountRef = useRef(0);
-  const drawnLabelsBBoxes = useRef<BBox[]>([]); // Tracks bounding boxes for the current frame
+  const drawnLabelsBBoxes = useRef<BBox[]>([]);
 
   // ── Safe Refs for Callbacks ─────────────────────────────────────────────────
   const selectedNodeRef = useRef<NodeObject | null>(null);
@@ -316,7 +315,6 @@ export default function Graph2DCanvas() {
 
       const LABEL_MIN_ZOOM = 1.5, LABEL_FULL_ZOOM = 2.25;
 
-      // Helper to draw a node's label with collision detection
       const drawLabel = () => {
         const labelFade = isActive ? 1 : Math.min(1, 0.3 + (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
         if (labelFade <= 0) return;
@@ -332,71 +330,90 @@ export default function Graph2DCanvas() {
         ctx.globalAlpha = labelFade;
         ctx.fillStyle = textColor;
 
-        const startY = node.y! + r + 4 / globalScale;
+        let currentY = node.y! + r + 2 / globalScale;
         const textToDraw = isActive ? node.label : truncateWords(node.label, 6);
 
-        // Measure initial single-line bounding box
-        const textWidth = ctx.measureText(textToDraw).width;
         const lineHeight = fontSize * 1.2;
-        const padding = 6 / globalScale;
+        const paddingX = 2 / globalScale;
+        const paddingY = 2 / globalScale; // Very small padding over Y
 
-        const proposedBBox: BBox = {
-          x: node.x! - textWidth / 2 - padding,
-          y: startY - padding,
-          width: textWidth + padding * 2,
-          height: lineHeight + padding * 2
+        let textWidth = ctx.measureText(textToDraw).width;
+
+        let proposedBBox: BBox = {
+          x: node.x! - textWidth / 2 - paddingX,
+          y: currentY - paddingY,
+          width: textWidth + paddingX * 2,
+          height: lineHeight + paddingY * 2
         };
 
-        // Check for collisions with already drawn labels
-        let hasCollision = false;
-        for (const box of drawnLabelsBBoxes.current) {
-          if (isColliding(proposedBBox, box)) {
-            hasCollision = true;
-            break;
-          }
-        }
+        let isOverlap = drawnLabelsBBoxes.current.some(box => isColliding(proposedBBox, box));
+        let useTwoLines = false;
+        let line1 = textToDraw;
+        let line2 = '';
 
-        const words = textToDraw.split(' ');
-
-        if (hasCollision && words.length > 1) {
-          // Collision detected -> Split into 2 lines
+        if (isOverlap && textToDraw.includes(' ')) {
+          // Try wrapping to 2 lines
+          const words = textToDraw.split(' ');
           const mid = Math.ceil(words.length / 2);
-          const line1 = words.slice(0, mid).join(' ');
-          const line2 = words.slice(mid).join(' ');
+          line1 = words.slice(0, mid).join(' ');
+          line2 = words.slice(mid).join(' ');
 
-          ctx.fillText(line1, node.x!, startY);
-          ctx.fillText(line2, node.x!, startY + lineHeight);
-
-          // Calculate composite bounding box for the 2 lines
           const w1 = ctx.measureText(line1).width;
           const w2 = ctx.measureText(line2).width;
-          const maxWidth = Math.max(w1, w2);
+          textWidth = Math.max(w1, w2);
 
-          drawnLabelsBBoxes.current.push({
-            x: node.x! - maxWidth / 2 - padding,
-            y: startY - padding,
-            width: maxWidth + padding * 2,
-            height: (lineHeight * 2) + padding * 2
-          });
-        } else {
-          // No collision (or can't be split) -> Draw single line
-          ctx.fillText(textToDraw, node.x!, startY);
-          drawnLabelsBBoxes.current.push(proposedBBox);
+          // Recalculate BBox completely for 2 lines
+          proposedBBox = {
+            x: node.x! - textWidth / 2 - paddingX,
+            y: currentY - paddingY,
+            width: textWidth + paddingX * 2,
+            height: (lineHeight * 2) + paddingY * 2
+          };
+
+          useTwoLines = true;
+          // Check if the NEW 2-line shape still overlaps
+          isOverlap = drawnLabelsBBoxes.current.some(box => isColliding(proposedBBox, box));
         }
 
+        // Logic to add small padding shift (over Y) to clear minor overlaps
+        let yShifts = 0;
+        const maxShifts = 3;
+        const shiftAmount = 2 / globalScale; // Shift slightly down
+
+        while (isOverlap && yShifts < maxShifts) {
+          currentY += shiftAmount;
+          proposedBBox.y += shiftAmount;
+          isOverlap = drawnLabelsBBoxes.current.some(box => isColliding(proposedBBox, box));
+          yShifts++;
+        }
+
+        // HIDING LOGIC COMPLETELY REMOVED. ALL LABELS WILL DRAW REGARDLESS OF OVERLAP.
+
+        if (useTwoLines) {
+          ctx.fillText(line1, node.x!, currentY);
+          ctx.fillText(line2, node.x!, currentY + lineHeight);
+        } else {
+          ctx.fillText(textToDraw, node.x!, currentY);
+        }
+
+        drawnLabelsBBoxes.current.push(proposedBBox);
         ctx.restore();
       };
 
+      // Assign priority so important elements claim space first
+      const drawPriority = isActive ? 2 : (hasHighlight && highlightNodeIds.has(node.id) ? 1 : 0);
+
       if (isActive) {
-        deferredLabels.current.push(drawLabel);
+        deferredLabels.current.push({ priority: drawPriority, draw: drawLabel });
       } else if (globalScale >= LABEL_MIN_ZOOM) {
-        drawLabel();
+        deferredLabels.current.push({ priority: drawPriority, draw: drawLabel });
       }
 
       // ── Flush frame logic ──────────────────────────────────────────────────
       if (paintCountRef.current >= graphData.nodes.length) {
-        // Draw all active labels on top
-        deferredLabels.current.forEach(fn => fn());
+        // Sort descending by priority so Active/Hovered nodes claim BBoxes first.
+        deferredLabels.current.sort((a, b) => b.priority - a.priority);
+        deferredLabels.current.forEach(item => item.draw());
         deferredLabels.current = [];
 
         // Reset counters and clear collision boundaries for the next frame
@@ -474,28 +491,23 @@ export default function Graph2DCanvas() {
   }, [graphData, startTransitions]);
 
   const handleDragEnd = useCallback((node: NodeObject) => {
-    // 1. Release the node back to the physics engine
     node.fx = null;
     node.fy = null;
 
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
 
-    // 2. Create the Ease-Out effect by injecting initial velocity
-    // Assuming the cluster center is (0,0) based on your forceX/forceY config
     const targetX = 0;
     const targetY = 0;
 
     const dx = targetX - (node.x ?? 0);
     const dy = targetY - (node.y ?? 0);
 
-    // Change this from 0.15 to a much smaller fraction
     const SPEED_MULTIPLIER = 0.015;
 
     node.vx = (node.vx ?? 0) + (dx * SPEED_MULTIPLIER);
     node.vy = (node.vy ?? 0) + (dy * SPEED_MULTIPLIER);
 
-    // 3. Wake up the simulation so friction and collision forces can take over
     if (fgRef.current) {
       fgRef.current.d3ReheatSimulation();
     }
@@ -507,42 +519,13 @@ export default function Graph2DCanvas() {
     startTransitions(hoveredNode, q, selectedNodeRef.current);
   }, [startTransitions, hoveredNode]);
 
-  // ── Easing functions ────────────────────────────────────────────────────────
-  function easeOutCubic(t: number): number {
-    return 1 - Math.pow(1 - t, 3);
-  }
-
-  // ── Smooth zoom animator ─────────────────────────────────────────────────────
-  function animateZoom(
-    fg: any,
-    target: number,
-    duration = 600,
-    rafRef: { current: number | null },
-  ) {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const start = fg.zoom();
-    if (start === target) return;
-    const startTime = performance.now();
-
-    const step = (now: number) => {
-      const t = Math.min(1, (now - startTime) / duration);
-      fg.zoom(start + (target - start) * easeOutCubic(t), 0);
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        rafRef.current = null;
-      }
-    };
-    rafRef.current = requestAnimationFrame(step);
-  }
-
   // ── Controls ───────────────────────────────────────────────────────────────
   const handleZoomIn = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
     const current = fg.zoom() ?? 1;
     const target = Math.min(12, current * 1.4);
-    animateZoom(fg, target, 600, zoomRafRef);
+    fg.zoom(target, 600);
   }, []);
 
   const handleZoomOut = useCallback(() => {
@@ -550,7 +533,7 @@ export default function Graph2DCanvas() {
     if (!fg) return;
     const current = fg.zoom() ?? 1;
     const target = Math.max(0.1, current / 1.4);
-    animateZoom(fg, target, 600, zoomRafRef);
+    fg.zoom(target, 600);
   }, []);
 
   const handleFitView = useCallback(() => { fgRef.current?.zoomToFit(500, 80); }, []);
