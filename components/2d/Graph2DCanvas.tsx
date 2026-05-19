@@ -405,11 +405,35 @@ export default function Graph2DCanvas() {
   }, [graphData, startTransitions]);
 
   const handleDragEnd = useCallback((node: NodeObject) => {
-    node.fx = null; node.fy = null;
+    // 1. Unfix the node so D3 physics can take over again
+    node.fx = null;
+    node.fy = null;
+
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
     setHoveredNode(null);
     startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
+
+    // 2. Ease-out the snap-back using temporary velocity dampening
+    let frame = 0;
+    const totalFrames = 45; // Roughly 750ms of easing at 60fps
+
+    const easeRelease = () => {
+      frame++;
+      if (frame < totalFrames) {
+        // Calculate a multiplier that starts near 0 and smoothly ramps up to 1.
+        const dampening = easeInOut(frame / totalFrames);
+
+        // Actively throttle the velocity D3 tries to apply. 
+        // This prevents the violent rubber-band effect.
+        if (node.vx !== undefined) node.vx *= dampening;
+        if (node.vy !== undefined) node.vy *= dampening;
+
+        requestAnimationFrame(easeRelease);
+      }
+    };
+
+    easeRelease();
   }, [startTransitions]);
 
   // ── Search handler ─────────────────────────────────────────────────────────
@@ -452,6 +476,7 @@ export default function Graph2DCanvas() {
         showPointerCursor={(n: any) => !!n}
         enableNodeDrag={true}
         onNodeDrag={handleNodeDrag as any}
+        onNodeDragEnd={handleDragEnd as any}
         d3AlphaDecay={0.008}
         d3VelocityDecay={0.3}
         warmupTicks={100}
