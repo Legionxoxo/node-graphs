@@ -497,6 +497,10 @@ export default function Graph2DCanvas() {
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
 
+    // Clear any hover/drag highlight state so node doesn't retain hover appearance
+    startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
+
+    // Gravity pull toward center
     const targetX = 0;
     const targetY = 0;
 
