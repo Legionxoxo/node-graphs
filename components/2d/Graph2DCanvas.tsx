@@ -27,6 +27,13 @@ interface LinkObject {
   strength?: number;
 }
 
+interface BBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BG_COLOR = '#ffffff';
 const BASE_R = 5;
@@ -64,17 +71,14 @@ const nodeColor = (n: NodeObject) => GROUP_COLORS[n.group] ?? GROUP_COLORS.defau
 const nodeRadius = (n: NodeObject) => BASE_R * Math.sqrt(n.val ?? 1);
 const resolveId = (r: NodeObject | string) => (typeof r === 'object' ? r.id : r);
 
-const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && current) { lines.push(current); current = word; }
-    else current = test;
-  }
-  if (current) lines.push(current);
-  return lines;
+// AABB Collision detection
+const isColliding = (b1: BBox, b2: BBox): boolean => {
+  return !(
+    b1.x + b1.width < b2.x ||
+    b2.x + b2.width < b1.x ||
+    b1.y + b1.height < b2.y ||
+    b2.y + b2.height < b1.y
+  );
 };
 
 // Truncates text to a specific word count and adds ellipsis if needed
@@ -118,9 +122,10 @@ export default function Graph2DCanvas() {
   const currentColorRef = useRef<Map<string, string>>(new Map());
   const currentRadiusRef = useRef<Map<string, number>>(new Map());
 
-  // ── Deferred label rendering (for z-ordering active labels above nodes) ────
+  // ── Deferred label rendering & Collision ────────────────────────────────────
   const deferredLabels = useRef<Array<() => void>>([]);
   const paintCountRef = useRef(0);
+  const drawnLabelsBBoxes = useRef<BBox[]>([]); // Tracks bounding boxes for the current frame
 
   // ── Safe Refs for Callbacks ─────────────────────────────────────────────────
   const selectedNodeRef = useRef<NodeObject | null>(null);
@@ -309,10 +314,9 @@ export default function Graph2DCanvas() {
       const isActive = node.id === (draggingNodeRef.current?.id ?? hoveredNode?.id ?? selectedNode?.id) ||
         (searchQuery.trim() && (node.label ?? node.id).toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // Changed thresholds for visibility
       const LABEL_MIN_ZOOM = 1.5, LABEL_FULL_ZOOM = 2.25;
 
-      // Helper to draw a node's label
+      // Helper to draw a node's label with collision detection
       const drawLabel = () => {
         const labelFade = isActive ? 1 : Math.min(1, 0.3 + (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
         if (labelFade <= 0) return;
@@ -329,27 +333,74 @@ export default function Graph2DCanvas() {
         ctx.fillStyle = textColor;
 
         const startY = node.y! + r + 4 / globalScale;
+        const textToDraw = isActive ? node.label : truncateWords(node.label, 6);
 
-        if (isActive) {
-          ctx.fillText(node.label, node.x!, startY);
-        } else {
-          const truncatedLine = truncateWords(node.label, 7);
-          ctx.fillText(truncatedLine, node.x!, startY);
+        // Measure initial single-line bounding box
+        const textWidth = ctx.measureText(textToDraw).width;
+        const lineHeight = fontSize * 1.2;
+        const padding = 6 / globalScale;
+
+        const proposedBBox: BBox = {
+          x: node.x! - textWidth / 2 - padding,
+          y: startY - padding,
+          width: textWidth + padding * 2,
+          height: lineHeight + padding * 2
+        };
+
+        // Check for collisions with already drawn labels
+        let hasCollision = false;
+        for (const box of drawnLabelsBBoxes.current) {
+          if (isColliding(proposedBBox, box)) {
+            hasCollision = true;
+            break;
+          }
         }
+
+        const words = textToDraw.split(' ');
+
+        if (hasCollision && words.length > 1) {
+          // Collision detected -> Split into 2 lines
+          const mid = Math.ceil(words.length / 2);
+          const line1 = words.slice(0, mid).join(' ');
+          const line2 = words.slice(mid).join(' ');
+
+          ctx.fillText(line1, node.x!, startY);
+          ctx.fillText(line2, node.x!, startY + lineHeight);
+
+          // Calculate composite bounding box for the 2 lines
+          const w1 = ctx.measureText(line1).width;
+          const w2 = ctx.measureText(line2).width;
+          const maxWidth = Math.max(w1, w2);
+
+          drawnLabelsBBoxes.current.push({
+            x: node.x! - maxWidth / 2 - padding,
+            y: startY - padding,
+            width: maxWidth + padding * 2,
+            height: (lineHeight * 2) + padding * 2
+          });
+        } else {
+          // No collision (or can't be split) -> Draw single line
+          ctx.fillText(textToDraw, node.x!, startY);
+          drawnLabelsBBoxes.current.push(proposedBBox);
+        }
+
         ctx.restore();
       };
 
       if (isActive) {
-        // Defer active labels so they render on top of all nodes
         deferredLabels.current.push(drawLabel);
       } else if (globalScale >= LABEL_MIN_ZOOM) {
         drawLabel();
       }
 
-      // After the last node is painted, flush deferred active labels on top
+      // ── Flush frame logic ──────────────────────────────────────────────────
       if (paintCountRef.current >= graphData.nodes.length) {
+        // Draw all active labels on top
         deferredLabels.current.forEach(fn => fn());
         deferredLabels.current = [];
+
+        // Reset counters and clear collision boundaries for the next frame
+        drawnLabelsBBoxes.current = [];
         paintCountRef.current = 0;
       }
     },

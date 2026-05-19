@@ -72,7 +72,7 @@ const obsidianGraphData: GraphData = {
         },
         {
             id: "mongodb",
-            label: "MongoDB Atlas Search Index Configuration Guide",
+            label: "MongoDB Atlas Search Index Configuration ",
             group: "database",
             val: 0.5,
         },
