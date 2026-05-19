@@ -34,14 +34,54 @@ export const GROUP_COLORS: Record<string, string> = {
 // ─── Sample data ──────────────────────────────────────────────────────────────
 const obsidianGraphData: GraphData = {
     nodes: [
-        { id: "shiv", label: "Re: Quick sync needed - your availability this week", group: "ideas", val: 0.5 },
-        { id: "Ritu", label: "Project update - milestone achieved ahead of schedule", group: "ideas", val: 0.5 },
-        { id: "Bishal", label: "Follow-up: Design review feedback and next steps", group: "ideas", val: 0.5 },
-        { id: "nodejs", label: "Node.js Performance Best Practices for Production", group: "backend", val: 0.5 },
-        { id: "express", label: "Setting up Express.js Middleware for Auth & Logging", group: "backend", val: 0.5 },
-        { id: "graphql", label: "GraphQL Schema Design Patterns and Federation", group: "backend", val: 0.5 },
-        { id: "mongodb", label: "MongoDB Atlas Search Index Configuration Guide", group: "database", val: 0.5 },
-        { id: "firebase", label: "Firebase Authentication Flow with Google OAuth", group: "database", val: 0.5 },
+        {
+            id: "shiv",
+            label: "Re: Quick sync needed - your availability this week",
+            group: "ideas",
+            val: 0.5,
+        },
+        {
+            id: "Ritu",
+            label: "Project update - milestone achieved ahead of schedule",
+            group: "ideas",
+            val: 0.5,
+        },
+        {
+            id: "Bishal",
+            label: "Follow-up: Design review feedback and next steps",
+            group: "ideas",
+            val: 0.5,
+        },
+        {
+            id: "nodejs",
+            label: "Node.js Performance Best Practices for Production",
+            group: "backend",
+            val: 0.5,
+        },
+        {
+            id: "express",
+            label: "Setting up Express.js Middleware for Auth & Logging",
+            group: "backend",
+            val: 0.5,
+        },
+        {
+            id: "graphql",
+            label: "GraphQL Schema Design Patterns and Federation",
+            group: "backend",
+            val: 0.5,
+        },
+        {
+            id: "mongodb",
+            label: "MongoDB Atlas Search Index Configuration Guide",
+            group: "database",
+            val: 0.5,
+        },
+        {
+            id: "firebase",
+            label: "Firebase Authentication Flow with Google OAuth",
+            group: "database",
+            val: 0.5,
+        },
         {
             id: "redis",
             label: "Following Up on Our Last Conversation - Action Items",
@@ -66,7 +106,12 @@ const obsidianGraphData: GraphData = {
             group: "ai",
             val: 0.5,
         },
-        { id: "embeddings", label: "Understanding Text Embeddings and Vector Similarity", group: "ai", val: 0.5 },
+        {
+            id: "embeddings",
+            label: "Understanding Text Embeddings and Vector Similarity",
+            group: "ai",
+            val: 0.5,
+        },
         {
             id: "seo-research",
             label: "SEO Research: Keyword Ranking Analysis and Competitor Overview",
@@ -79,7 +124,12 @@ const obsidianGraphData: GraphData = {
             group: "research",
             val: 0.5,
         },
-        { id: "web3", label: "Web3 Architecture Overview and Decentralized Identity", group: "blockchain", val: 0.5 },
+        {
+            id: "web3",
+            label: "Web3 Architecture Overview and Decentralized Identity",
+            group: "blockchain",
+            val: 0.5,
+        },
         {
             id: "nft-marketplace",
             label: "NFT Marketplace Smart Contract Security Audit Report",
@@ -104,14 +154,24 @@ const obsidianGraphData: GraphData = {
             group: "security",
             val: 0.5,
         },
-        { id: "zero-trust", label: "Zero Trust Security Model Implementation Guide", group: "security", val: 0.5 },
+        {
+            id: "zero-trust",
+            label: "Zero Trust Security Model Implementation Guide",
+            group: "security",
+            val: 0.5,
+        },
         {
             id: "obsidian-clone",
             label: "Obsidian Clone: Building a Knowledge Graph Note-Taking App",
             group: "ideas",
             val: 0.5,
         },
-        { id: "graph-view", label: "Graph View: Interactive Visualization for Connected Notes", group: "ideas", val: 0.5 },
+        {
+            id: "graph-view",
+            label: "Graph View: Interactive Visualization for Connected Notes",
+            group: "ideas",
+            val: 0.5,
+        },
         {
             id: "knowledge-graph",
             label: "Knowledge Graph: Linking Concepts Across Your Second Brain",
@@ -158,7 +218,6 @@ const obsidianGraphData: GraphData = {
         { source: "obsidian-clone", target: "web3", strength: 0.6 },
         { source: "obsidian-clone", target: "vector-db", strength: 0.6 },
         { source: "llm", target: "seo-research", strength: 0.6 },
-        { source: "graphql", target: "vector-db", strength: 0.6 },
         { source: "e2ee", target: "web3", strength: 0.6 },
         { source: "firebase", target: "ai-notes", strength: 0.6 },
     ],

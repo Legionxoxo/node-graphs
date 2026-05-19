@@ -30,7 +30,6 @@ interface LinkObject {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BG_COLOR = '#ffffff';
 const BASE_R = 5;
-const LABEL_FONT = '500 11px Inter, ui-sans-serif, sans-serif';
 
 const COLOR_ACTIVE = '#896BE6';
 const COLOR_NEIGHBOR = '#5C5C5C';
@@ -78,6 +77,16 @@ const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 };
 
+// Truncates text to a specific word count and adds ellipsis if needed
+const truncateWords = (text: string, maxWords: number): string => {
+  if (!text) return '';
+  const words = text.split(' ');
+  if (words.length > maxWords) {
+    return words.slice(0, maxWords).join(' ') + '...';
+  }
+  return text;
+};
+
 // ─── Transition state ────────────────────────────────────────────────────────
 interface NodeTransition {
   fromColor: string;
@@ -96,13 +105,16 @@ export default function Graph2DCanvas() {
   const [selectedNode, setSelectedNode] = useState<NodeObject | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [dimensions, setDimensions] = useState({ w: 800, h: 600 });
+  const [renderTrigger, setRenderTrigger] = useState(0);
 
   const draggingNodeRef = useRef<NodeObject | null>(null);
   const dragNeighborIdsRef = useRef<Set<string>>(new Set());
 
-  // ── Transition refs (written in event handlers, read in paintNode RAF) ──────
+  const dragRafRef = useRef<number | null>(null);
+  const pumpRafRef = useRef<number | null>(null);
+
+  // ── Transition refs ─────────────────────────────────────────────────────────
   const nodeTransitions = useRef<Map<string, NodeTransition>>(new Map());
-  // Tracks current interpolated color/radius for mid-flight snapshot
   const currentColorRef = useRef<Map<string, string>>(new Map());
   const currentRadiusRef = useRef<Map<string, number>>(new Map());
 
@@ -110,7 +122,6 @@ export default function Graph2DCanvas() {
   const selectedNodeRef = useRef<NodeObject | null>(null);
   const searchQueryRef = useRef('');
 
-  // ✅ FIX: Sync refs cleanly in a useEffect to prevent React strict-mode tearing
   useEffect(() => {
     selectedNodeRef.current = selectedNode;
     searchQueryRef.current = searchQuery;
@@ -128,14 +139,21 @@ export default function Graph2DCanvas() {
     newSelected: NodeObject | null,
   ) => {
     const now = performance.now();
-    const activeFocusId = (newFocus ?? newSelected)?.id ?? null;
 
-    // ✅ FIX: Force the simulation engine to stay awake so paintNode fires during the transition
-    if (fgRef.current?.d3ReheatSimulation) {
-      fgRef.current.d3ReheatSimulation();
-    }
+    if (pumpRafRef.current) cancelAnimationFrame(pumpRafRef.current);
 
-    // Build highlight set for the new state
+    let frames = 0;
+    const pumpCanvas = () => {
+      frames++;
+      if (frames < 15) {
+        setRenderTrigger(prev => prev + 1);
+        pumpRafRef.current = requestAnimationFrame(pumpCanvas);
+      } else {
+        pumpRafRef.current = null;
+      }
+    };
+    pumpCanvas();
+
     const highlightIds = new Set<string>();
     const activeFocus = newFocus ?? newSelected;
 
@@ -161,11 +179,9 @@ export default function Graph2DCanvas() {
     const hasHL = highlightIds.size > 0;
 
     graphData.nodes.forEach(node => {
-      // Snapshot current actual visible state on the screen as "from"
       const fromColor = currentColorRef.current.get(node.id) ?? nodeColor(node);
       const fromRadius = currentRadiusRef.current.get(node.id) ?? 1.0;
 
-      // Compute target color for new state
       const isActive = node.id === activeFocus?.id ||
         (newSearch.trim() && (node.label ?? node.id).toLowerCase().includes(newSearch.toLowerCase()));
 
@@ -191,35 +207,10 @@ export default function Graph2DCanvas() {
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  // ── Visibility & Window Focus: clear hover on hide/blur ───────────────────
-  useEffect(() => {
-    const clearAllHover = () => {
-      draggingNodeRef.current = null;
-      dragNeighborIdsRef.current = new Set();
-      setHoveredNode(null);
-      startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
-    };
-
-    const onVisibility = () => {
-      if (document.hidden) clearAllHover();
-    };
-
-    const onBlur = () => {
-      clearAllHover();
-    };
-
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [startTransitions]);
-
   // ── d3 force configuration ─────────────────────────────────────────────────
   useEffect(() => {
     let rafId: ReturnType<typeof setTimeout>;
-    let isMounted = true; // ✅ FIX: Prevent state changes on unmounted component
+    let isMounted = true;
 
     const tryApplyForces = () => {
       const fg = fgRef.current;
@@ -228,7 +219,7 @@ export default function Graph2DCanvas() {
         return;
       }
       import('d3-force').then((d3) => {
-        if (!isMounted) return; // ✅ FIX: Abort if component unmounted while fetching chunk
+        if (!isMounted) return;
 
         fg.d3Force('center', null);
         fg.d3Force('x', d3.forceX(0).strength(0.09));
@@ -249,7 +240,7 @@ export default function Graph2DCanvas() {
     };
   }, []);
 
-  // ── Highlight sets (for links + labels — React state path) ────────────────
+  // ── Highlight sets (for links + labels) ───────────────────────────────────
   const { highlightNodeIds, highlightLinkSet } = useMemo(() => {
     const focus = hoveredNode ?? selectedNode;
     const hNodeIds = new Set<string>();
@@ -272,7 +263,7 @@ export default function Graph2DCanvas() {
 
   const hasHighlight = highlightNodeIds.size > 0;
 
-  // ── Node painter (called every RAF frame by the library) ───────────────────
+  // ── Node painter ─────────────────────────────────────────────────────────────
   const paintNode = useCallback(
     (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const now = performance.now();
@@ -284,7 +275,6 @@ export default function Graph2DCanvas() {
       if (tr) {
         const elapsed = now - tr.startTime;
         if (elapsed >= TRANSITION_MS) {
-          // Transition is complete! Draw the exact target state and remove from active transitions
           displayColor = tr.toColor;
           radiusMul = tr.toRadius;
           currentColorRef.current.set(node.id, displayColor);
@@ -310,30 +300,44 @@ export default function Graph2DCanvas() {
       ctx.fill();
       ctx.restore();
 
-      // ── Labels ─────────────────────────────────────────────────────────────
       const isActive = node.id === (draggingNodeRef.current?.id ?? hoveredNode?.id ?? selectedNode?.id) ||
         (searchQuery.trim() && (node.label ?? node.id).toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const LABEL_MIN_ZOOM = 1.0, LABEL_FULL_ZOOM = 2.0;
+      // Changed thresholds for visibility
+      const LABEL_MIN_ZOOM = 1.5, LABEL_FULL_ZOOM = 2.25;
+
       if (!isActive && globalScale < LABEL_MIN_ZOOM) return;
-      const labelFade = isActive ? 1 : Math.min(1, (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
+
+      const labelFade = isActive ? 1 : Math.min(1, 0.3 + (globalScale - LABEL_MIN_ZOOM) / (LABEL_FULL_ZOOM - LABEL_MIN_ZOOM));
       if (labelFade <= 0) return;
 
-      const fontSize = Math.max(9, Math.min(13, 11 / Math.sqrt(globalScale)));
+      // Step-based font scaling: 10px at 1.5–2x, 12px at 2–2.5x, 14px at 2.5–3x, 16px at 3x+
+      const VISUAL_FONT_SIZE = globalScale < 2.0 ? 10 : globalScale < 2.5 ? 12 : globalScale < 3.0 ? 14 : 16;
+      const fontSize = VISUAL_FONT_SIZE / globalScale;
+
       const textColor = isActive ? '#3E3E3E' : hasHighlight && !highlightNodeIds.has(node.id) ? COLOR_REST : nodeColor(node);
 
       ctx.save();
-      ctx.font = LABEL_FONT.replace('11px', `${fontSize}px`);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.globalAlpha = labelFade; ctx.fillStyle = textColor;
-      const maxWidth = 200 / globalScale;
-      const lineH = (fontSize + 2) / globalScale;
-      const lines = wrapText(ctx, node.label, maxWidth);
+      ctx.font = `500 ${fontSize}px Inter, ui-sans-serif, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.globalAlpha = labelFade;
+      ctx.fillStyle = textColor;
+
       const startY = node.y! + r + 4 / globalScale;
-      lines.forEach((line, i) => ctx.fillText(line, node.x!, startY + i * lineH));
+
+      if (isActive) {
+        // Show full text on single line, no wrap
+        ctx.fillText(node.label, node.x!, startY);
+      } else {
+        // Truncate to one line of ~7 words if not active
+        const truncatedLine = truncateWords(node.label, 7);
+        ctx.fillText(truncatedLine, node.x!, startY);
+      }
+
       ctx.restore();
     },
-    [hoveredNode, selectedNode, searchQuery, hasHighlight, highlightNodeIds],
+    [hoveredNode, selectedNode, searchQuery, hasHighlight, highlightNodeIds, renderTrigger],
   );
 
   // ── Link painter ───────────────────────────────────────────────────────────
@@ -389,11 +393,9 @@ export default function Graph2DCanvas() {
   }, [startTransitions]);
 
   const handleNodeDrag = useCallback((node: NodeObject) => {
-    // Guard: only run setup on first frame of drag, not every 60fps
     if (draggingNodeRef.current?.id === node.id) return;
-
     draggingNodeRef.current = node;
-    setHoveredNode(node);
+
     const neighbors = new Set<string>([node.id]);
     graphData.links.forEach(l => {
       const src = resolveId(l.source); const tgt = resolveId(l.target);
@@ -405,36 +407,37 @@ export default function Graph2DCanvas() {
   }, [graphData, startTransitions]);
 
   const handleDragEnd = useCallback((node: NodeObject) => {
-    // 1. Unfix the node so D3 physics can take over again
     node.fx = null;
     node.fy = null;
 
+    const affectedIds = new Set(dragNeighborIdsRef.current);
+    const affectedNodes = graphData.nodes.filter(n => affectedIds.has(n.id));
+
     draggingNodeRef.current = null;
     dragNeighborIdsRef.current = new Set();
-    setHoveredNode(null);
-    startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
 
-    // 2. Ease-out the snap-back using temporary velocity dampening
+    startTransitions(node, searchQueryRef.current, selectedNodeRef.current);
+
+    if (dragRafRef.current) cancelAnimationFrame(dragRafRef.current);
+
     let frame = 0;
-    const totalFrames = 45; // Roughly 750ms of easing at 60fps
+    const totalFrames = 25;
 
     const easeRelease = () => {
       frame++;
       if (frame < totalFrames) {
-        // Calculate a multiplier that starts near 0 and smoothly ramps up to 1.
-        const dampening = easeInOut(frame / totalFrames);
-
-        // Actively throttle the velocity D3 tries to apply. 
-        // This prevents the violent rubber-band effect.
-        if (node.vx !== undefined) node.vx *= dampening;
-        if (node.vy !== undefined) node.vy *= dampening;
-
-        requestAnimationFrame(easeRelease);
+        affectedNodes.forEach(n => {
+          if (n.vx !== undefined) n.vx *= 0.92;
+          if (n.vy !== undefined) n.vy *= 0.92;
+        });
+        dragRafRef.current = requestAnimationFrame(easeRelease);
+      } else {
+        dragRafRef.current = null;
       }
     };
 
     easeRelease();
-  }, [startTransitions]);
+  }, [startTransitions, graphData]);
 
   // ── Search handler ─────────────────────────────────────────────────────────
   const handleSearch = useCallback((q: string) => {
@@ -448,14 +451,7 @@ export default function Graph2DCanvas() {
   const handleFitView = useCallback(() => { fgRef.current?.zoomToFit(500, 80); }, []);
 
   return (
-    <div
-      ref={wrapperRef}
-      className="graph2d-root"
-      onMouseLeave={() => {
-        setHoveredNode(null);
-        startTransitions(null, searchQueryRef.current, selectedNodeRef.current);
-      }}
-    >
+    <div ref={wrapperRef} className="graph2d-root">
       <ForceGraph2D
         ref={fgRef}
         graphData={graphData as any}
